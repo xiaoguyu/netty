@@ -893,8 +893,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             if (outboundBuffer == null) {
                 return;
             }
-
+            // 将unflushedEntry移到flushedEntry，为flush0()做准备
+            // 并且如果大小低于低水位，则修改channel状态为可写
             outboundBuffer.addFlush();
+            // 将outboundBuffer中flushedEntry写入socket
             flush0();
         }
 

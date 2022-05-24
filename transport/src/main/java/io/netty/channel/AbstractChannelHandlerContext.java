@@ -780,11 +780,13 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             ReferenceCountUtil.release(msg);
             throw e;
         }
-
+        // 获取对应的输出handler
         final AbstractChannelHandlerContext next = findContextOutbound(flush ?
                 (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
         final Object m = pipeline.touch(msg, next);
+        // 获取对应的处理线程（EventLoop）
         EventExecutor executor = next.executor();
+        // 如果线程是EventLoop线程，直接执行，否则加入任务队列
         if (executor.inEventLoop()) {
             if (flush) {
                 next.invokeWriteAndFlush(m, promise);
@@ -798,6 +800,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
                 // and put it back in the Recycler for re-use later.
                 //
                 // See https://github.com/netty/netty/issues/8343.
+                // 如果加入失败，则取消该任务，类似拒绝策略
                 task.cancel();
             }
         }
