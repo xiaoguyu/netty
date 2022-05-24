@@ -138,10 +138,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
                  SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
                  EventLoopTaskQueueFactory taskQueueFactory, EventLoopTaskQueueFactory tailTaskQueueFactory) {
+        // 在这里设置了addTaskWakesUp=false
+        // 因为NioEventLoop的死循环是由selector阻塞的，而不是由任务队列
         super(parent, executor, false, newTaskQueue(taskQueueFactory), newTaskQueue(tailTaskQueueFactory),
                 rejectedExecutionHandler);
         this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
+        // 完成选择器（多路复用器）的初始化
         final SelectorTuple selectorTuple = openSelector();
         this.selector = selectorTuple.selector;
         this.unwrappedSelector = selectorTuple.unwrappedSelector;
@@ -173,14 +176,27 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private SelectorTuple openSelector() {
         final Selector unwrappedSelector;
         try {
+            // 通过往下追踪发现 provider.openSelector()最终调用了
+            // WindowsSelectorImpl 类的构造方法构造出一个 Selector，
+            // 因此 unwrappedSelector 是 WindowsSelectorImpl 的实例
             unwrappedSelector = provider.openSelector();
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
         }
 
+        // Netty 对 NIO 的 Selector 的 selectedKeys 进行了优化，用户可以
+        // 通过 io.netty.noKeySetOptimization 开关决定是否启用该优化
         if (DISABLE_KEY_SET_OPTIMIZATION) {
+            // 若没有开启 selectedKeys 优化，直接返回
             return new SelectorTuple(unwrappedSelector);
         }
+
+        // 若开启 selectedKeys 优化，需要通过反射的方式从 Selector 实例中
+        // 获取 selectedKeys 和 publicSelectedKeys，将上述两个成员变量置
+        // 为可写，然后通过反射的方式使用 Netty 构造的 selectedKeys 包装类
+        // selectedKeySet 将原 JDK 的 selectedKeys 替换掉。
+
+        // 以上这段表述就是后面的代码的内容
 
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
@@ -441,6 +457,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             try {
                 int strategy;
                 try {
+                    // 如果没有任务，则进入SELECT，有任务，则不进入switch，而是去看有没有io任务
+                    // 如果有io任务，优先io任务，然后才执行普通任务
                     strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
                     switch (strategy) {
                     case SelectStrategy.CONTINUE:
@@ -450,6 +468,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         // fall-through to SELECT since the busy-wait is not supported with NIO
 
                     case SelectStrategy.SELECT:
+                        // 下一次定时任务触发截止时间
                         long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
                         if (curDeadlineNanos == -1L) {
                             curDeadlineNanos = NONE; // nothing on the calendar
@@ -462,6 +481,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         } finally {
                             // This update is just to help block unnecessary selector wakeups
                             // so use of lazySet is ok (no race condition)
+                            // 阻止不必要的唤醒
                             nextWakeupNanos.lazySet(AWAKE);
                         }
                         // fall through
@@ -479,20 +499,25 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
+                // 控制处理io事件的事件占用比例，默认是百分之50，一半时间用来处理io事件，一半时间用来处理任务
                 final int ioRatio = this.ioRatio;
                 boolean ranTasks;
+                // 100%表示执行完全部任务，才进入下一轮循环
                 if (ioRatio == 100) {
                     try {
                         if (strategy > 0) {
+                            // 在对应的 Channel 上处理 IO 事件
                             processSelectedKeys();
                         }
                     } finally {
                         // Ensure we always run tasks.
+                        // 执行queueTask中全部的任务
                         ranTasks = runAllTasks();
                     }
                 } else if (strategy > 0) {
                     final long ioStartTime = System.nanoTime();
                     try {
+                        // 在对应的 Channel 上处理 IO 事件
                         processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
@@ -500,6 +525,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else {
+                    // 0表示运行运行最小数量的任务，即63个
                     ranTasks = runAllTasks(0); // This will run the minimum number of tasks
                 }
 
@@ -783,6 +809,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     @Override
     protected void wakeup(boolean inEventLoop) {
+        // 不是的当前EventLoop在执行的时候，才需要唤醒
+        // nextWakeupNanos放入AWAKE是阻止不必要的唤醒
         if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) {
             selector.wakeup();
         }
@@ -813,7 +841,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             return selector.select();
         }
         // Timeout will only be 0 if deadline is within 5 microsecs
+        // 如果deadlineNanos小于5纳秒，则为0,，否则取整为1毫秒
+        // 这段操作是为了向上取整，转成毫秒
         long timeoutMillis = deadlineToDelayNanos(deadlineNanos + 995000L) / 1000000L;
+        // 如果timeoutMillis大于0，就阻塞selector同样的时间
+        // 这段是为了获取最近的延时任务
         return timeoutMillis <= 0 ? selector.selectNow() : selector.select(timeoutMillis);
     }
 

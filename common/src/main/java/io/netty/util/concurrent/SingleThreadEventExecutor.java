@@ -830,9 +830,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
+        // 判断当前线程是否为eventLoop的线程
         boolean inEventLoop = inEventLoop();
+        // 将任务添加进taskQueue
         addTask(task);
         if (!inEventLoop) {
+            // 开启eventLoop的线程
             startThread();
             if (isShutdown()) {
                 boolean reject = false;
@@ -947,6 +950,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void startThread() {
         if (state == ST_NOT_STARTED) {
+            // cas修改状态
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
@@ -981,6 +985,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
+        // 这个Executor在EventLoopGroup构造时，就已经注入
+        // MultithreadEventExecutorGroup
+        // executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -992,6 +999,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // 这个整个NioEventLoop的核心，里面是个死循环
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {
@@ -999,6 +1007,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 } finally {
                     for (;;) {
                         int oldState = state;
+                        // 线程结束时，使用cas修改状态
                         if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
                                 SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
                             break;
@@ -1018,6 +1027,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                         // Run all remaining tasks and shutdown hooks. At this point the event loop
                         // is in ST_SHUTTING_DOWN state still accepting tasks which is needed for
                         // graceful shutdown with quietPeriod.
+                        // 再次确认线程是否关闭
                         for (;;) {
                             if (confirmShutdown()) {
                                 break;

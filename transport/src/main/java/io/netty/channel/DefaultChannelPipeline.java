@@ -208,6 +208,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
+            // 如果当前channel还没有注册到EventLoop关联的Selector上，
+            // 就将这个新创建的HandlerContext添加到当前pipeline的待办任务中，
+            // 当channel完成注册到Selector上之后，最终就会调用callHandlerAdded0()方法，就是调用handler的handlerAdded方法
             if (!registered) {
                 newCtx.setAddPending();
                 callHandlerCallbackLater(newCtx, true);

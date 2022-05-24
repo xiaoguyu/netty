@@ -72,6 +72,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
         checkPositive(nThreads, "nThreads");
 
+        // 这里的 ThreadPerTaskExecutor 实例是下文用于创建 EventExecutor 实例的参数
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
@@ -108,18 +109,24 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
+        // chooser 的作用是为了实现 next()方法，即从 group 中挑选
+        // 一个 NioEventLoop 来处理连接上 IO 事件的方法
         chooser = chooserFactory.newChooser(children);
 
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
+            // EventExecutor 的终止事件回调方法
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
                 if (terminatedChildren.incrementAndGet() == children.length) {
+                    // 通过本类中定义的 Promise 属性的.setSuccess()方法设置结果，
+                    // 所有的监听者可以拿到该结果
                     terminationFuture.setSuccess(null);
                 }
             }
         };
 
         for (EventExecutor e: children) {
+            // 为每一个 EventExecutor 添加终止事件监听器
             e.terminationFuture().addListener(terminationListener);
         }
 

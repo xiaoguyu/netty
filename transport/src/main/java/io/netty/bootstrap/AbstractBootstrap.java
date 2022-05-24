@@ -269,6 +269,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // 初始化 NioServerSocketChannel 的实例，并且将其注册到
+        // bossGroup 中的 EvenLoop 中的 Selector 中，initAndRegister()
+
+        // 实例的初始化和注册（此方法是异步的）：
+        // (1) 初始化：将handler注册进通道，并执行handler的handlerAdded、channelRegistered方法
+        // (2) 将channel注册进selector
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
@@ -277,13 +283,17 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
+            // 若异步过程 initAndRegister()已经执行完毕，则进入该分支
             ChannelPromise promise = channel.newPromise();
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
+            // 若异步过程 initAndRegister()还未执行完毕，则进入该分支
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
             regFuture.addListener(new ChannelFutureListener() {
+                // 监听 regFuture 的完成事件，完成之后再调用
+                // doBind0(regFuture, channel, localAddress, promise);
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
                     Throwable cause = future.cause();
@@ -307,7 +317,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            // 无参构造会创建pipelile
+            // NioServerSocketChannel
             channel = channelFactory.newChannel();
+            // 初始化相关属性
+            // 如果是ServerBoottrap，还会设置bossGroup的handler，
+            // 其中包括ServerBootstrap.handler设置的handler，以及最后添加ServerBootstrapAcceptor
+            // ServerBootstrapAcceptor就是将channel注册到workerGroup的类
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -320,6 +336,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
+        // 将channel注册进selector
+        // 依然是通过开启eventLoop线程的方式进行注册
+        // MultithreadEventLoopGroup
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -349,6 +368,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
+        // execute方法会将这个Runnable加入到taskQueue中，并开线程执行EventLoop的run方法(死循环)
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {

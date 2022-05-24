@@ -65,6 +65,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
 
         @Override
         public void read() {
+            // 断言检查eventLoop是否为当前线程
             assert eventLoop().inEventLoop();
             final ChannelConfig config = config();
             final ChannelPipeline pipeline = pipeline();
@@ -76,6 +77,9 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
+                        // 用于读取bossGroup中EventLoop的NIOServerSocketChannel接收到的请求数据，并把这些请求数据放入到readBuf
+                        // 结束后，readBuf中存放了一个处理客户端后续请求的NioSocketChannel
+                        // 与java nio对应的就是serverSocketChannel的accept生成SocketChannel，并封装成NioSocketChannel放入到readBuf中
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -94,6 +98,10 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    // 核心功能
+                    // 依次触发NioServerSocketChannel的pipeline中所有入站Handler中的channelRead()方法的执行
+                    // 注意：此处还是在bossGroup的线程，不是workGroup
+                    // 所以，执行可能是LoggingHandler
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

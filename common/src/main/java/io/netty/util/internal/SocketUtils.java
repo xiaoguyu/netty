@@ -113,6 +113,8 @@ public final class SocketUtils {
 
     public static SocketChannel accept(final ServerSocketChannel serverSocketChannel) throws IOException {
         try {
+            // 获取特权？
+            // 先暂时简化成serverSocketChannel.accept()看待
             return AccessController.doPrivileged(new PrivilegedExceptionAction<SocketChannel>() {
                 @Override
                 public SocketChannel run() throws IOException {
