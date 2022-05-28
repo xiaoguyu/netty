@@ -72,6 +72,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         this.parent = parent;
         id = newId();
         unsafe = newUnsafe();
+        // 创建管道，同时创建头尾的handlerContext
         pipeline = newChannelPipeline();
     }
 
@@ -476,9 +477,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             AbstractChannel.this.eventLoop = eventLoop;
 
+            // 判断如果当前线程是EventLoop的线程，则直接执行
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
+                // 否则添加进EventLoop的任务队列，由EventLoop的线程去执行
                 try {
                     eventLoop.execute(new Runnable() {
                         @Override
@@ -505,6 +508,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                // 将当前channel注册到selector中
                 doRegister();
                 neverRegistered = false;
                 registered = true;

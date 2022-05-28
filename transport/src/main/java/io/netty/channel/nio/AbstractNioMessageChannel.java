@@ -106,6 +106,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 }
                 readBuf.clear();
                 allocHandle.readComplete();
+                // 触发管道中所有handler的channelReadComplete方法
                 pipeline.fireChannelReadComplete();
 
                 if (exception != null) {

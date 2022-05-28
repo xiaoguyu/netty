@@ -70,6 +70,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
+        // 检查线程数量不能小于1
         checkPositive(nThreads, "nThreads");
 
         // 这里的 ThreadPerTaskExecutor 实例是下文用于创建 EventExecutor 实例的参数
@@ -82,6 +83,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
+                // 创建EventLoop（重点）
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
@@ -109,7 +111,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
-        // chooser 的作用是为了实现 next()方法，即从 group 中挑选
+        // chooser 的作用是为了实现 next()方法，即从 EventLoopGroup 中挑选
         // 一个 NioEventLoop 来处理连接上 IO 事件的方法
         chooser = chooserFactory.newChooser(children);
 

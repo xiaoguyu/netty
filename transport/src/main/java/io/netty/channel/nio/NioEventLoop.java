@@ -457,7 +457,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             try {
                 int strategy;
                 try {
-                    // 如果没有任务，则进入SELECT，有任务，则不进入switch，而是去看有没有io任务
+                    // 如果没有任务，则返回SELECT
+                    // 有任务，则获取io事件的个数。此时如果strategy >= 0
                     // 如果有io任务，优先io任务，然后才执行普通任务
                     strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
                     switch (strategy) {
@@ -475,6 +476,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         }
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
+                            // 再次判断没有任务
                             if (!hasTasks()) {
                                 strategy = select(curDeadlineNanos);
                             }
@@ -809,7 +811,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     @Override
     protected void wakeup(boolean inEventLoop) {
-        // 不是的当前EventLoop在执行的时候，才需要唤醒
+        // 不是当前EventLoop在执行的时候，才需要唤醒
         // nextWakeupNanos放入AWAKE是阻止不必要的唤醒
         if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) {
             selector.wakeup();

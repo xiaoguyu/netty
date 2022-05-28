@@ -70,6 +70,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
     }
 
     public NioEventLoopGroup(int nThreads, Executor executor) {
+        // SelectorProvider.provider()：selector工厂
         this(nThreads, executor, SelectorProvider.provider());
     }
 
@@ -166,8 +167,11 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
 
     @Override
     protected EventLoop newChild(Executor executor, Object... args) throws Exception {
+        // selector工厂
         SelectorProvider selectorProvider = (SelectorProvider) args[0];
+        // 选择策略工厂
         SelectStrategyFactory selectStrategyFactory = (SelectStrategyFactory) args[1];
+        // 拒绝执行处理器（任务添加到队列中失败时调用）
         RejectedExecutionHandler rejectedExecutionHandler = (RejectedExecutionHandler) args[2];
         EventLoopTaskQueueFactory taskQueueFactory = null;
         EventLoopTaskQueueFactory tailTaskQueueFactory = null;

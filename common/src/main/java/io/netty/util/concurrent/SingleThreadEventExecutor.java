@@ -341,7 +341,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      */
     protected void addTask(Runnable task) {
         ObjectUtil.checkNotNull(task, "task");
+        // 添加任务
         if (!offerTask(task)) {
+            // 如果添加失败，执行拒绝执行处理器
             reject(task);
         }
     }
@@ -853,7 +855,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 }
             }
         }
-
+        // 如果满足条件，则唤醒eventLoop
         if (!addTaskWakesUp && immediate) {
             wakeup(inEventLoop);
         }
@@ -949,6 +951,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
     private void startThread() {
+        // 一些状态判断，保证doStartThread只会被执行一次
         if (state == ST_NOT_STARTED) {
             // cas修改状态
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
